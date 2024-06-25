@@ -344,6 +344,8 @@ func (container *Container) UpdateContainer(hostConfig *containertypes.HostConfi
 func (container *Container) DetachAndUnmount(volumeEventLog func(name string, action events.Action, attributes map[string]string)) error {
 	ctx := context.TODO()
 
+	log.G(ctx).Error("IT SEEMS LIKE I AM NEVER USED")
+
 	networkMounts := container.NetworkMounts()
 	mountPaths := make([]string, 0, len(container.MountPoints)+len(networkMounts))
 
@@ -371,7 +373,9 @@ func (container *Container) DetachAndUnmount(volumeEventLog func(name string, ac
 				Warn("Unable to unmount")
 		}
 	}
-	return container.UnmountVolumes(ctx, volumeEventLog)
+
+	panic(1)
+	return container.UnmountVolumes(ctx, volumeEventLog, make([]Mount, 0))
 }
 
 // ignoreUnsupportedXAttrs ignores errors when extended attributes

@@ -133,7 +133,7 @@ func (daemon *Daemon) containerStart(ctx context.Context, daemonCfg *configStore
 		return err
 	}
 
-	m, cleanup, err := daemon.setupMounts(ctx, container)
+	m, cleanup, err := daemon.setupMounts(ctx, container, true /* Container start => mount as primary */)
 	if err != nil {
 		return err
 	}
@@ -249,46 +249,46 @@ func (daemon *Daemon) containerStart(ctx context.Context, daemonCfg *configStore
 
 // Cleanup releases any network resources allocated to the container along with any rules
 // around how containers are linked together.  It also unmounts the container's root filesystem.
-func (daemon *Daemon) Cleanup(ctx context.Context, container *container.Container) {
+func (daemon *Daemon) Cleanup(ctx context.Context, ctr *container.Container) {
 	// Microsoft HCS containers get in a bad state if host resources are
 	// released while the container still exists.
-	if ctr, ok := container.C8dContainer(); ok {
-		if err := ctr.Delete(context.Background()); err != nil {
-			log.G(ctx).Errorf("%s cleanup: failed to delete container from containerd: %v", container.ID, err)
+	if c8d, ok := ctr.C8dContainer(); ok {
+		if err := c8d.Delete(context.Background()); err != nil {
+			log.G(ctx).Errorf("%s cleanup: failed to delete container from containerd: %v", ctr.ID, err)
 		}
 	}
 
-	daemon.releaseNetwork(ctx, container)
+	daemon.releaseNetwork(ctx, ctr)
 
-	if err := container.UnmountIpcMount(); err != nil {
-		log.G(ctx).Warnf("%s cleanup: failed to unmount IPC: %s", container.ID, err)
+	if err := ctr.UnmountIpcMount(); err != nil {
+		log.G(ctx).Warnf("%s cleanup: failed to unmount IPC: %s", ctr.ID, err)
 	}
 
-	if err := daemon.conditionalUnmountOnCleanup(container); err != nil {
+	if err := daemon.conditionalUnmountOnCleanup(ctr); err != nil {
 		// FIXME: remove once reference counting for graphdrivers has been refactored
 		// Ensure that all the mounts are gone
-		if mountid, err := daemon.imageService.GetLayerMountID(container.ID); err == nil {
+		if mountid, err := daemon.imageService.GetLayerMountID(ctr.ID); err == nil {
 			daemon.cleanupMountsByID(mountid)
 		}
 	}
 
-	if err := container.UnmountSecrets(); err != nil {
-		log.G(ctx).Warnf("%s cleanup: failed to unmount secrets: %s", container.ID, err)
+	if err := ctr.UnmountSecrets(); err != nil {
+		log.G(ctx).Warnf("%s cleanup: failed to unmount secrets: %s", ctr.ID, err)
 	}
 
-	if err := recursiveUnmount(container.Root); err != nil {
-		log.G(ctx).WithError(err).WithField("container", container.ID).Warn("Error while cleaning up container resource mounts.")
+	if err := recursiveUnmount(ctr.Root); err != nil {
+		log.G(ctx).WithError(err).WithField("container", ctr.ID).Warn("Error while cleaning up container resource mounts.")
 	}
 
-	for _, eConfig := range container.ExecCommands.Commands() {
-		daemon.unregisterExecCommand(container, eConfig)
+	for _, eConfig := range ctr.ExecCommands.Commands() {
+		daemon.unregisterExecCommand(ctr, eConfig)
 	}
 
-	if container.BaseFS != "" {
-		if err := container.UnmountVolumes(ctx, daemon.LogVolumeEvent); err != nil {
-			log.G(ctx).Warnf("%s cleanup: Failed to umount volumes: %v", container.ID, err)
+	if ctr.BaseFS != "" {
+		if err := ctr.UnmountVolumes(ctx, daemon.LogVolumeEvent, make([]container.Mount, 0)); err != nil {
+			log.G(ctx).Warnf("%s cleanup: Failed to umount volumes: %v", ctr.ID, err)
 		}
 	}
 
-	container.CancelAttachContext()
+	ctr.CancelAttachContext()
 }

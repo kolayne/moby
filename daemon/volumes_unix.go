@@ -25,7 +25,7 @@ import (
 //
 // The cleanup function should be called as soon as the container has been
 // started.
-func (daemon *Daemon) setupMounts(ctx context.Context, c *container.Container) ([]container.Mount, func(context.Context) error, error) {
+func (daemon *Daemon) setupMounts(ctx context.Context, c *container.Container, mountAsPrimary bool) ([]container.Mount, func(context.Context) error, error) {
 	var mounts []container.Mount
 	// TODO: tmpfs mounts should be part of Mountpoints
 	tmpfsMounts := make(map[string]bool)
@@ -54,7 +54,7 @@ func (daemon *Daemon) setupMounts(ctx context.Context, c *container.Container) (
 		// If the daemon is being shutdown, we should not let a container start if it is trying to
 		// mount the socket the daemon is listening on. During daemon shutdown, the socket
 		// (/var/run/docker.sock by default) doesn't exist anymore causing the call to m.Setup to
-		// create at directory instead. This in turn will prevent the daemon to restart.
+		// create a directory instead. This in turn will prevent the daemon from restarting.
 		checkfunc := func(m *volumemounts.MountPoint) error {
 			if _, exist := daemon.hosts[m.Source]; exist && daemon.IsShuttingDown() {
 				return fmt.Errorf("Could not mount %q to container while the daemon is shutting down", m.Source)
@@ -62,7 +62,7 @@ func (daemon *Daemon) setupMounts(ctx context.Context, c *container.Container) (
 			return nil
 		}
 
-		path, clean, err := m.Setup(ctx, c.MountLabel, daemon.idMapping.RootPair(), checkfunc)
+		path, mountID, clean, err := m.Setup(ctx, c.MountLabel, daemon.idMapping.RootPair(), checkfunc, mountAsPrimary)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -70,6 +70,7 @@ func (daemon *Daemon) setupMounts(ctx context.Context, c *container.Container) (
 
 		if !c.TrySetNetworkMount(m.Destination, path) {
 			mnt := container.Mount{
+				ID:          mountID,
 				Source:      path,
 				Destination: m.Destination,
 				Writable:    m.RW,

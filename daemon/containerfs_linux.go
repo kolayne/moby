@@ -46,15 +46,28 @@ type future struct {
 // block while another function is running. If more than one call is blocked
 // concurrently, the order they are unblocked is undefined.
 type containerFSView struct {
-	d    *Daemon
-	ctr  *container.Container
-	todo chan future
-	done chan error
+	d         *Daemon
+	ctr       *container.Container
+	todo      chan future
+	done      chan error
+	keepMount []container.Mount
 }
 
 // openContainerFS opens a new view of the container's filesystem.
 func (daemon *Daemon) openContainerFS(ctr *container.Container) (_ *containerFSView, err error) {
 	ctx := context.TODO()
+
+	/*
+		ctr := &container.Container{}
+		*ctr = *ctr_
+
+		ctr.MountPoints = map[string]*volumemounts.MountPoint{}
+		for k, v := range ctr_.MountPoints {
+			ctr.MountPoints[k] = &volumemounts.MountPoint{}
+			*ctr.MountPoints[k] = *v
+			ctr.MountPoints[k].ID = ""
+		}
+	*/
 
 	if err := daemon.Mount(ctr); err != nil {
 		return nil, err
@@ -65,7 +78,7 @@ func (daemon *Daemon) openContainerFS(ctr *container.Container) (_ *containerFSV
 		}
 	}()
 
-	mounts, cleanup, err := daemon.setupMounts(ctx, ctr)
+	mounts, cleanup, err := daemon.setupMounts(ctx, ctr, false /* mounting for external access => non-primary */)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +86,7 @@ func (daemon *Daemon) openContainerFS(ctr *container.Container) (_ *containerFSV
 		ctx := context.WithoutCancel(ctx)
 		cleanup(ctx)
 		if err != nil {
-			_ = ctr.UnmountVolumes(ctx, daemon.LogVolumeEvent)
+			_ = ctr.UnmountVolumes(ctx, daemon.LogVolumeEvent, mounts /* FIXME */)
 		}
 	}()
 
@@ -166,10 +179,11 @@ func (daemon *Daemon) openContainerFS(ctr *container.Container) (_ *containerFSV
 		return nil, err
 	}
 	vw := &containerFSView{
-		d:    daemon,
-		ctr:  ctr,
-		todo: todo,
-		done: done,
+		d:         daemon,
+		ctr:       ctr,
+		todo:      todo,
+		done:      done,
+		keepMount: mounts,
 	}
 	runtime.SetFinalizer(vw, (*containerFSView).Close)
 	return vw, nil
@@ -211,7 +225,7 @@ func (vw *containerFSView) Close() error {
 	runtime.SetFinalizer(vw, nil)
 	close(vw.todo)
 	err := multierror.Append(nil, <-vw.done)
-	err = multierror.Append(err, vw.ctr.UnmountVolumes(context.TODO(), vw.d.LogVolumeEvent))
+	err = multierror.Append(err, vw.ctr.UnmountVolumes(context.TODO(), vw.d.LogVolumeEvent, vw.keepMount))
 	err = multierror.Append(err, vw.d.Unmount(vw.ctr))
 	return err.ErrorOrNil()
 }

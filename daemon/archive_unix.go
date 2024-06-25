@@ -4,6 +4,7 @@ package daemon // import "github.com/docker/docker/daemon"
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -71,6 +72,9 @@ func (daemon *Daemon) containerArchivePath(container *container.Container, path 
 		sourceDir, sourceBase = filepath.Split(absPath)
 	}
 	opts := archive.TarResourceRebaseOpts(sourceBase, filepath.Base(absPath))
+
+	fmt.Println(sourceDir)
+	fmt.Println(sourceBase)
 
 	tb, err := archive.NewTarballer(sourceDir, opts)
 	if err != nil {

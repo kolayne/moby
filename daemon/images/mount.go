@@ -33,6 +33,7 @@ func (i *ImageService) Mount(ctx context.Context, container *container.Container
 		}
 	}
 	container.BaseFS = dir // TODO: combine these fields
+	fmt.Printf("ImageService mounted %s\n", dir)
 	return nil
 }
 
@@ -45,6 +46,7 @@ func (i *ImageService) Unmount(ctx context.Context, container *container.Contain
 		log.G(ctx).WithField("container", container.ID).WithError(err).Error("error unmounting container")
 		return err
 	}
+	fmt.Printf("ImageService's Unmount called\n")
 
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"syscall"
 	"time"
@@ -522,14 +523,31 @@ func (container *Container) AddMountPointWithVolume(destination string, vol volu
 }
 
 // UnmountVolumes unmounts all volumes
-func (container *Container) UnmountVolumes(ctx context.Context, volumeEventLog func(name string, action events.Action, attributes map[string]string)) error {
+func (container *Container) UnmountVolumes(ctx context.Context, volumeEventLog func(name string, action events.Action, attributes map[string]string), mounts []Mount /* FIXME: this is a bad API */) error {
+	// TODO: this should be rewritten completely
 	var errs []string
 	for _, volumeMount := range container.MountPoints {
 		if volumeMount.Volume == nil {
 			continue
 		}
 
-		if err := volumeMount.Cleanup(ctx); err != nil {
+		var thisMountId string
+		for _, correspondingMount := range mounts {
+			if volumeMount.MountedIDs[correspondingMount.ID] { // Found the corresponding
+				thisMountId = correspondingMount.ID
+			}
+		}
+		if len(mounts) == 0 {
+			fmt.Println("Shit, a stub call... Setting PrimaryID")
+			debug.PrintStack()
+			fmt.Println()
+			thisMountId = volumeMount.PrimaryID
+		}
+		if thisMountId == "" {
+			fmt.Println("This should have never happened...")
+		}
+
+		if err := volumeMount.Cleanup(ctx, thisMountId); err != nil {
 			errs = append(errs, err.Error())
 			continue
 		}
